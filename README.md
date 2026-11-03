@@ -214,21 +214,19 @@ Create a PostgreSQL database named `ev_erp` using your provider's dashboard or a
 CREATE DATABASE ev_erp;
 ```
 
-Set both connection URLs in `.env`. Use a pooled PostgreSQL URL for application requests and a direct, non-pooled PostgreSQL URL for Prisma migrations. For local PostgreSQL, both can use the same connection:
+Set `DATABASE_URL` in `.env` to the PostgreSQL connection string provided by your database service:
 
 ```env
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/ev_erp?schema=public"
-DIRECT_URL="postgresql://USER:PASSWORD@HOST:5432/ev_erp?schema=public"
 ```
 
-URL-encode special characters in the username or password. In Vercel, assign the pooled integration URL to the exact variable name `DATABASE_URL` and its direct/non-pooled URL to `DIRECT_URL`, for each deployment environment. Do not use MySQL URLs with this PostgreSQL schema.
+URL-encode special characters in the username or password. Set the value under the exact variable name `DATABASE_URL` in Vercel. Do not use MySQL URLs with this PostgreSQL schema.
 
 Other environment variables in `.env.example`:
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | PostgreSQL pooled connection used by the app (required) |
-| `DIRECT_URL` | Direct PostgreSQL connection used by Prisma migrations (required) |
+| `DATABASE_URL` | PostgreSQL connection used by the app and Prisma migrations (required) |
 | `NEXTAUTH_SECRET` | Secret placeholder for deployment configuration; review actual session implementation before production |
 | `NEXT_PUBLIC_APP_NAME` | Application display name |
 | `NEXT_PUBLIC_APP_URL` | Public base URL |
@@ -257,10 +255,9 @@ The checked-in `vercel.json` runs `npm run vercel-build`. That command applies p
 
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | The provider's pooled PostgreSQL connection URL, used by the running app |
-| `DIRECT_URL` | The provider's direct, non-pooled PostgreSQL connection URL, used by Prisma migrations |
+| `DATABASE_URL` | The PostgreSQL connection string shown by the provider's Quick connect flow |
 
-Use the PostgreSQL integration values, not variables containing `POSTGRES_URL` unless they actually contain the PostgreSQL URL and are assigned to the exact names above. Set separate Preview and Production database URLs (or disable Preview deployments) so a Preview build cannot apply migrations to the Production database. The PostgreSQL database itself must already exist; Prisma migrations create its tables and constraints. The Vercel build does **not** run the seed script, to avoid creating or resetting demo accounts in production.
+Use the PostgreSQL integration value, not a MySQL URL. Set separate Preview and Production database URLs (or disable Preview deployments) so a Preview build cannot apply migrations to the Production database. The PostgreSQL database itself must already exist; Prisma migrations create its tables and constraints. The Vercel build does **not** run the seed script, to avoid creating or resetting demo accounts in production.
 
 ### 4. Start the application
 

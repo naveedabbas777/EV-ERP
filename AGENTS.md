@@ -324,9 +324,8 @@ Use Prisma ORM with PostgreSQL.
 Configure schema.prisma:
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 Create properly related database models for:
@@ -390,7 +389,6 @@ ev_erp
 Use the following environment variable format:
 
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/ev_erp?schema=public"
-DIRECT_URL="postgresql://USER:PASSWORD@HOST:5432/ev_erp?schema=public"
 
 Explain that credentials in the connection URL must be URL-encoded when they contain special characters.
 
