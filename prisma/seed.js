@@ -370,7 +370,6 @@ async function seedDemoData(db) {
           address: showroom.address,
           warehouse: {
             create: {
-              organizationId: pakistanOrg.id,
               name: `${showroom.name} stock`,
               code: `SR-PAK-${showroom.code}`,
               location: showroom.address,
