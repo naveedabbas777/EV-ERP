@@ -48,6 +48,8 @@ test('one-time seed acquires a lock, seeds, then records completion', async () =
     'create',
   ]);
   assert.match(calls[1][1], /pg_advisory_xact_lock/);
+  assert.match(calls[1][1], /MATERIALIZED/);
+  assert.match(calls[1][1], /SELECT 1 AS locked/);
   assert.equal(calls[0][1].timeout, 120_000);
 });
 
