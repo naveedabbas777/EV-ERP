@@ -1,6 +1,6 @@
 # EV Dealer Management ERP
 
-EV ERP is a JavaScript-based dealer operations application for an electric-vehicle company. It combines an organization-aware ERP dashboard with dealer and showroom workflows, backed by MySQL through Prisma.
+EV ERP is a JavaScript-based dealer operations application for an electric-vehicle company. It combines an organization-aware ERP dashboard with dealer and showroom workflows, backed by PostgreSQL through Prisma.
 
 > **Project status:** This repository is an actively developed application and demo, not a fully security-hardened production SaaS. Review the security and operational notes before exposing it to real users or data.
 
@@ -36,7 +36,7 @@ Organization, dealer, showroom, and sale ownership is represented by Prisma rela
 ## Technology
 
 - **Runtime and UI:** Next.js 16 App Router, React 19, JavaScript, Tailwind CSS 4.
-- **Database:** MySQL/MariaDB (including local XAMPP installations).
+- **Database:** PostgreSQL (including hosted PostgreSQL services connected through Vercel).
 - **Data access:** Prisma ORM and Prisma Client.
 - **Forms and validation:** React Hook Form and Zod.
 - **Client state/data:** TanStack React Query and Zustand.
@@ -124,8 +124,9 @@ Access is scoped using organization identity and, where applicable, dealer and s
 
 ```text
 prisma/
-  migrations/                 Forward-only SQL migration history
-  schema.prisma               MySQL data model and relations
+  migrations/                 PostgreSQL SQL migration history
+  migrations-mysql-legacy/    Archived MySQL migrations; not used by Prisma
+  schema.prisma               PostgreSQL data model and relations
   seed.js                     Demo organizations, roles, users, and records
 src/
   app/
@@ -191,7 +192,7 @@ For exact request and response shapes, see the corresponding `route.js` handler 
 
 - Node.js supported by the installed Next.js version (Node.js 20.9 or later recommended).
 - npm.
-- MySQL or MariaDB. For local development, XAMPP with MySQL enabled is supported.
+- A PostgreSQL database, hosted or running locally.
 
 ### 1. Install packages
 
@@ -207,25 +208,27 @@ In PowerShell:
 Copy-Item .env.example .env
 ```
 
-Create the database in phpMyAdmin or a MySQL client:
+Create a PostgreSQL database named `ev_erp` using your provider's dashboard or a PostgreSQL client:
 
 ```sql
-CREATE DATABASE ev_erp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE ev_erp;
 ```
 
-Set `DATABASE_URL` in `.env` to the URL format expected by Prisma. For a local XAMPP MySQL instance using the default `root` account without a password:
+Set both connection URLs in `.env`. Use a pooled PostgreSQL URL for application requests and a direct, non-pooled PostgreSQL URL for Prisma migrations. For local PostgreSQL, both can use the same connection:
 
 ```env
-DATABASE_URL="mysql://root@localhost:3306/ev_erp"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/ev_erp?schema=public"
+DIRECT_URL="postgresql://USER:PASSWORD@HOST:5432/ev_erp?schema=public"
 ```
 
-If MySQL has a password, include it after the username (for example, `mysql://root:your-password@localhost:3306/ev_erp`) and URL-encode special characters in the username or password.
+URL-encode special characters in the username or password. In Vercel, assign the pooled integration URL to the exact variable name `DATABASE_URL` and its direct/non-pooled URL to `DIRECT_URL`, for each deployment environment. Do not use MySQL URLs with this PostgreSQL schema.
 
 Other environment variables in `.env.example`:
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | MySQL connection used by Prisma (required) |
+| `DATABASE_URL` | PostgreSQL pooled connection used by the app (required) |
+| `DIRECT_URL` | Direct PostgreSQL connection used by Prisma migrations (required) |
 | `NEXTAUTH_SECRET` | Secret placeholder for deployment configuration; review actual session implementation before production |
 | `NEXT_PUBLIC_APP_NAME` | Application display name |
 | `NEXT_PUBLIC_APP_URL` | Public base URL |
@@ -246,7 +249,18 @@ npx prisma generate
 npx prisma db seed
 ```
 
-`migrate deploy` applies the checked-in migration history; the seed adds demo data. The seed can be rerun to reapply baseline data, but it resets demo account passwords to the configured seed values.
+`migrate deploy` applies the checked-in PostgreSQL migration history; the seed adds demo data. The seed can be rerun to reapply baseline data, but it resets demo account passwords to the configured seed values.
+
+### Vercel deployment
+
+The checked-in `vercel.json` runs `npm run vercel-build`. That command applies pending PostgreSQL migrations with `prisma migrate deploy`, generates Prisma Client, and then builds the Next.js app. Configure these Vercel environment variables for every environment you deploy:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | The provider's pooled PostgreSQL connection URL, used by the running app |
+| `DIRECT_URL` | The provider's direct, non-pooled PostgreSQL connection URL, used by Prisma migrations |
+
+Use the PostgreSQL integration values, not variables containing `POSTGRES_URL` unless they actually contain the PostgreSQL URL and are assigned to the exact names above. Set separate Preview and Production database URLs (or disable Preview deployments) so a Preview build cannot apply migrations to the Production database. The PostgreSQL database itself must already exist; Prisma migrations create its tables and constraints. The Vercel build does **not** run the seed script, to avoid creating or resetting demo accounts in production.
 
 ### 4. Start the application
 
@@ -279,14 +293,7 @@ The Pakistan Dealer Admin is assigned to dealer `PAK-1001` and can manage its Ka
 
 ## Database migrations
 
-Migration directories are timestamped and applied in order. The current checked-in migrations are:
-
-1. `20261102062617_init` — core ERP schema.
-2. `20261102072744_add_approval_and_transfer_workflows` — approval and inventory-transfer workflows.
-3. `20261102084841_add_pakistani_seed_data` — Pakistan seed-related schema changes.
-4. `20261102153000_tenant_scoped_finance_and_procurement` — organization-scoped finance and procurement.
-5. `20261102184500_add_showroom_management` — dealers’ showrooms, showroom stock, retail sales, and showroom access data.
-6. `20261103100000_enforce_tenant_relation_integrity` — tenant-aware composite foreign keys and organization ownership for payment/return records.
+Migration directories are timestamped and applied in order. The active `prisma/migrations/` history is PostgreSQL-specific. The earlier MySQL migration files are retained in `prisma/migrations-mysql-legacy/` for reference only; Prisma does not apply them. PostgreSQL is being introduced with a fresh database, so apply the initial PostgreSQL migration to an empty database and then seed it. Existing MySQL records are not automatically transferred.
 
 For local schema development, edit `prisma/schema.prisma`, then create and apply a named migration:
 
@@ -301,7 +308,7 @@ Check migration state:
 npx prisma migrate status
 ```
 
-For deployed environments, apply checked-in migrations with `npx prisma migrate deploy`; do not use `migrate dev` against production. Avoid editing an already-applied migration. If Prisma Client regeneration fails on Windows because the query-engine DLL is locked, stop the project’s Next.js process, regenerate the client, then restart the app.
+For deployed environments, apply checked-in migrations with `npx prisma migrate deploy` or `npm run prisma:deploy`; do not use `migrate dev` against production. Avoid editing an already-applied migration. If Prisma Client regeneration fails on Windows because the query-engine DLL is locked, stop the project’s Next.js process, regenerate the client, then restart the app.
 
 ## Commands and validation
 
@@ -309,15 +316,17 @@ For deployed environments, apply checked-in migrations with `npx prisma migrate 
 |---|---|
 | `npm run dev` | Start Next.js development server |
 | `npm run build` | Create the optimized production build |
+| `npm run vercel-build` | Apply PostgreSQL migrations, generate Prisma Client, and build for Vercel |
 | `npm start` | Start the production server after building |
 | `npm run lint` | Run ESLint across the repository |
 | `npm test` | Run Node.js tests under `tests/` |
 | `npm run prisma:generate` | Generate Prisma Client |
+| `npm run prisma:deploy` | Apply checked-in migrations to the configured database |
 | `npm run prisma:seed` | Seed demo data |
 | `npx prisma validate` | Validate Prisma schema |
 | `npx prisma migrate status` | Check migration state |
 
-The `npm run prisma:migrate` script is configured for local development with the default migration name `init`. Prefer the explicit `npx prisma migrate dev --name ...` command when creating a new migration.
+Use `npx prisma migrate dev --name describe_the_change` when creating a new migration during local development. The deployment script applies existing migrations only.
 
 ## Security and operational notes
 

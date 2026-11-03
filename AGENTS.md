@@ -15,7 +15,7 @@ Use the following technology stack:
 - React
 - Tailwind CSS
 - Prisma ORM
-- MySQL/MariaDB through XAMPP
+- PostgreSQL through Prisma
 - Axios for API requests where appropriate
 - React Hook Form
 - Zod for validation
@@ -30,8 +30,8 @@ Use the following technology stack:
 Strict rules:
 - Use .js and .jsx files only.
 - Never create .ts or .tsx files.
-- Never use PostgreSQL.
-- Use Prisma with the MySQL provider.
+- Use PostgreSQL for the database.
+- Use Prisma with the PostgreSQL provider.
 - Use JavaScript syntax throughout the frontend, backend, API routes, services, and utilities.
 
 ## 2. PROJECT OBJECTIVE
@@ -319,13 +319,14 @@ Workflow:
 
 ## 7. DATABASE ARCHITECTURE
 
-Use Prisma ORM with MySQL.
+Use Prisma ORM with PostgreSQL.
 
 Configure schema.prisma:
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 Create properly related database models for:
@@ -380,19 +381,18 @@ Use appropriate cascading behavior. Never cascade-delete important financial or 
 
 Design the schema carefully before generating migrations.
 
-## 8. XAMPP DATABASE CONFIGURATION
+## 8. POSTGRESQL DATABASE CONFIGURATION
 
-Assume XAMPP is installed locally.
-
-Create a database named:
+Use a hosted or local PostgreSQL database. Create a database named:
 
 ev_erp
 
 Use the following environment variable format:
 
-DATABASE_URL="mysql://root:@localhost:3306/ev_erp"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/ev_erp?schema=public"
+DIRECT_URL="postgresql://USER:PASSWORD@HOST:5432/ev_erp?schema=public"
 
-Explain that if MySQL has a password, it must be added to the connection URL with correct URL encoding.
+Explain that credentials in the connection URL must be URL-encoded when they contain special characters.
 
 Do not commit .env files to Git.
 
@@ -626,7 +626,7 @@ PHASE 3:
 Configure Tailwind CSS, reusable UI components, layouts, sidebar, topbar, and dashboard.
 
 PHASE 4:
-Configure Prisma and XAMPP MySQL connectivity.
+Configure Prisma and PostgreSQL connectivity.
 
 PHASE 5:
 Design and implement the complete database schema.
@@ -676,7 +676,7 @@ At the end of each phase, provide:
 
 FINAL GOAL:
 
-Deliver a complete, modular, responsive EV Dealer Management ERP SaaS application built with Next.js JavaScript, Prisma ORM, and XAMPP MySQL, with working business workflows, secure authorization, clean code, seed data, and production-oriented architecture.
+Deliver a complete, modular, responsive EV Dealer Management ERP SaaS application built with Next.js JavaScript, Prisma ORM, and PostgreSQL, with working business workflows, secure authorization, clean code, seed data, and production-oriented architecture.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
