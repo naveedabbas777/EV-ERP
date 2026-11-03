@@ -82,3 +82,72 @@ test('seed failure does not create the completion marker', async () => {
 
   assert.equal(calls.some(([name]) => name === 'create'), false);
 });
+
+test('database errors log the Prisma operation and source call site', async () => {
+  const { prisma } = createPrismaMock();
+  const tx = {
+    $queryRaw: async () => [],
+    seedState: {
+      findUnique: async () => null,
+      create: async () => {},
+    },
+    user: {
+      upsert: async () => {
+        throw new Error('Unique constraint failed');
+      },
+    },
+  };
+  prisma.$transaction = async (callback) => callback(tx);
+  const originalConsoleError = console.error;
+  const messages = [];
+  console.error = (message) => messages.push(message);
+
+  try {
+    await assert.rejects(
+      runSeedOnce(prisma, async (db) => db.user.upsert({ where: { id: 'demo' } })),
+      /Unique constraint failed/,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(messages.length, 1);
+  const diagnostic = JSON.parse(messages[0]);
+  assert.equal(diagnostic.event, 'Prisma seed operation failed');
+  assert.equal(diagnostic.model, 'user');
+  assert.equal(diagnostic.action, 'upsert');
+  assert.match(diagnostic.callSite, /seed-once\.test\.mjs/);
+  assert.equal(diagnostic.error.message, 'Unique constraint failed');
+});
+
+test('database URLs are redacted from Prisma error logs', async () => {
+  const { prisma } = createPrismaMock();
+  const tx = {
+    $queryRaw: async () => [],
+    seedState: {
+      findUnique: async () => null,
+      create: async () => {},
+    },
+    user: {
+      upsert: async () => {
+        throw new Error('Connection failed: postgresql://user:secret@example.com/db');
+      },
+    },
+  };
+  prisma.$transaction = async (callback) => callback(tx);
+  const originalConsoleError = console.error;
+  const messages = [];
+  console.error = (message) => messages.push(message);
+
+  try {
+    await assert.rejects(
+      runSeedOnce(prisma, async (db) => db.user.upsert({ where: { id: 'demo' } })),
+      /Connection failed/,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.doesNotMatch(messages[0], /user:secret/);
+  assert.match(messages[0], /\[redacted database URL\]/);
+});

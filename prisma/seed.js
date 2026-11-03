@@ -696,7 +696,22 @@ runSeedOnce(prisma, seedDemoData)
     }, null, 2));
   })
   .catch((error) => {
-    console.error(error);
+    const cause = error instanceof Error ? error : new Error(String(error));
+    console.error(JSON.stringify({
+      event: 'Demo seed failed',
+      error: {
+        name: cause.name,
+        message: cause.message.replace(
+          /\bpostgres(?:ql)?:\/\/[^\s"'`]+|\bmysql:\/\/[^\s"'`]+/gi,
+          '[redacted database URL]',
+        ),
+        code: cause.code,
+        stack: cause.stack?.replace(
+          /\bpostgres(?:ql)?:\/\/[^\s"'`]+|\bmysql:\/\/[^\s"'`]+/gi,
+          '[redacted database URL]',
+        ),
+      },
+    }, null, 2));
     process.exitCode = 1;
   })
   .finally(async () => {
