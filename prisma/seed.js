@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { runSeedOnce } = require('./seed-once');
 
 const prisma = new PrismaClient();
 
@@ -7,18 +8,9 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required before running Prisma seed data.');
 }
 
-const DEMO_SEED_SUMMARY = {
-  primaryOrganization: 'ev-dealer-group',
-  secondaryOrganization: 'pakistan-ev-dealer-group',
-  defaultPasswords: {
-    admin: process.env.DEMO_ADMIN_PASSWORD || 'Admin@1234',
-    pakistan: 'PakAdmin@123',
-  },
-};
-
-async function createNotificationsIfMissing(notifications) {
+async function createNotificationsIfMissing(db, notifications) {
   for (const notification of notifications) {
-    const existing = await prisma.notification.findFirst({
+    const existing = await db.notification.findFirst({
       where: {
         organizationId: notification.organizationId,
         userId: notification.userId,
@@ -29,12 +21,12 @@ async function createNotificationsIfMissing(notifications) {
     });
 
     if (!existing) {
-      await prisma.notification.create({ data: notification });
+      await db.notification.create({ data: notification });
     }
   }
 }
 
-async function main() {
+async function seedDemoData(db) {
   const roles = [
     'Super Admin',
     'General Manager',
@@ -109,7 +101,7 @@ async function main() {
     ],
   };
 
-  const org = await prisma.organization.upsert({
+  const org = await db.organization.upsert({
     where: { slug: 'ev-dealer-group' },
     update: {},
     create: {
@@ -121,7 +113,7 @@ async function main() {
   });
 
   for (const roleName of roles) {
-    const role = await prisma.role.upsert({
+    const role = await db.role.upsert({
       where: { name: roleName },
       update: {},
       create: { name: roleName, description: `${roleName} access role` },
@@ -129,13 +121,13 @@ async function main() {
 
     const keys = rolePermissionMap[roleName] || [];
     for (const permissionKey of keys) {
-      const permission = await prisma.permission.upsert({
+      const permission = await db.permission.upsert({
         where: { key: permissionKey },
         update: {},
         create: { key: permissionKey, description: permissionKey },
       });
 
-      await prisma.rolePermission.upsert({
+      await db.rolePermission.upsert({
         where: {
           roleId_permissionId: { roleId: role.id, permissionId: permission.id },
         },
@@ -149,7 +141,7 @@ async function main() {
   }
 
   for (const permissionKey of permissions) {
-    await prisma.permission.upsert({
+    await db.permission.upsert({
       where: { key: permissionKey },
       update: {},
       create: { key: permissionKey, description: permissionKey },
@@ -169,7 +161,7 @@ async function main() {
 
   for (const demoUser of demoUsers) {
     const passwordHash = await bcrypt.hash(demoUser.password, 10);
-    const user = await prisma.user.upsert({
+    const user = await db.user.upsert({
       where: { organizationId_email: { organizationId: org.id, email: demoUser.email } },
       update: {
         name: demoUser.name,
@@ -187,9 +179,9 @@ async function main() {
       },
     });
 
-    const role = await prisma.role.findUnique({ where: { name: demoUser.role } });
+    const role = await db.role.findUnique({ where: { name: demoUser.role } });
     if (role) {
-      await prisma.userRole.upsert({
+      await db.userRole.upsert({
         where: { userId_roleId: { userId: user.id, roleId: role.id } },
         update: {},
         create: { userId: user.id, roleId: role.id },
@@ -197,12 +189,12 @@ async function main() {
     }
   }
 
-  const primaryAdmin = await prisma.user.findFirst({
+  const primaryAdmin = await db.user.findFirst({
     where: { organizationId: org.id, email: process.env.DEMO_ADMIN_EMAIL || 'admin@evdealer.com' },
   });
 
   if (primaryAdmin) {
-    await createNotificationsIfMissing([
+    await createNotificationsIfMissing(db, [
       {
         organizationId: org.id,
         userId: primaryAdmin.id,
@@ -227,7 +219,7 @@ async function main() {
     ]);
   }
 
-  const pakistanOrg = await prisma.organization.upsert({
+  const pakistanOrg = await db.organization.upsert({
     where: { slug: 'pakistan-ev-dealer-group' },
     update: {
       settings: { country: 'Pakistan', theme: 'dark' },
@@ -249,7 +241,7 @@ async function main() {
 
   for (const pakistanUser of pakistanUsers) {
     const passwordHash = await bcrypt.hash(pakistanUser.password, 10);
-    const user = await prisma.user.upsert({
+    const user = await db.user.upsert({
       where: { organizationId_email: { organizationId: pakistanOrg.id, email: pakistanUser.email } },
       update: {
         name: pakistanUser.name,
@@ -267,9 +259,9 @@ async function main() {
       },
     });
 
-    const role = await prisma.role.findUnique({ where: { name: pakistanUser.role } });
+    const role = await db.role.findUnique({ where: { name: pakistanUser.role } });
     if (role) {
-      await prisma.userRole.upsert({
+      await db.userRole.upsert({
         where: { userId_roleId: { userId: user.id, roleId: role.id } },
         update: {},
         create: { userId: user.id, roleId: role.id },
@@ -277,12 +269,12 @@ async function main() {
     }
   }
 
-  const pakistanAdmin = await prisma.user.findFirst({
+  const pakistanAdmin = await db.user.findFirst({
     where: { organizationId: pakistanOrg.id, email: 'hamza.khan@pakistan-ev.com' },
   });
 
   if (pakistanAdmin) {
-    await createNotificationsIfMissing([
+    await createNotificationsIfMissing(db, [
       {
         organizationId: pakistanOrg.id,
         userId: pakistanAdmin.id,
@@ -309,7 +301,7 @@ async function main() {
 
   const createdPakistanRegions = [];
   for (const region of pakistanRegions) {
-    const result = await prisma.region.upsert({
+    const result = await db.region.upsert({
       where: { organizationId_code: { organizationId: pakistanOrg.id, code: region.code } },
       update: {},
       create: {
@@ -329,7 +321,7 @@ async function main() {
 
   for (const dealer of pakistanDealers) {
     const region = createdPakistanRegions.find((entry) => entry.code === dealer.regionCode);
-    await prisma.dealer.upsert({
+    await db.dealer.upsert({
       where: { registrationNumber: dealer.registrationNumber },
       update: {},
       create: {
@@ -348,26 +340,26 @@ async function main() {
     });
   }
 
-  const karachiDealer = await prisma.dealer.findUnique({ where: { registrationNumber: 'PAK-1001' } });
-  const pakistanDealerAdmin = await prisma.user.findUnique({
+  const karachiDealer = await db.dealer.findUnique({ where: { registrationNumber: 'PAK-1001' } });
+  const pakistanDealerAdmin = await db.user.findUnique({
     where: { organizationId_email: { organizationId: pakistanOrg.id, email: 'usman.tariq@pakistan-ev.com' } },
   });
   if (karachiDealer && pakistanDealerAdmin) {
-    await prisma.user.update({
+    await db.user.update({
       where: { id: pakistanDealerAdmin.id },
       data: { dealerId: karachiDealer.id, showroomId: null },
     });
-    const dealerAdminRole = await prisma.role.findUnique({ where: { name: 'Dealer Admin' } });
+    const dealerAdminRole = await db.role.findUnique({ where: { name: 'Dealer Admin' } });
     if (dealerAdminRole) {
-      await prisma.userRole.deleteMany({ where: { userId: pakistanDealerAdmin.id } });
-      await prisma.userRole.create({ data: { userId: pakistanDealerAdmin.id, roleId: dealerAdminRole.id } });
+      await db.userRole.deleteMany({ where: { userId: pakistanDealerAdmin.id } });
+      await db.userRole.create({ data: { userId: pakistanDealerAdmin.id, roleId: dealerAdminRole.id } });
     }
 
     for (const showroom of [
       { name: 'Karachi City Centre', code: 'KHI-CENTRAL', address: 'Saddar, Karachi' },
       { name: 'Karachi Clifton', code: 'KHI-CLIFTON', address: 'Clifton, Karachi' },
     ]) {
-      const location = await prisma.showroom.upsert({
+      const location = await db.showroom.upsert({
         where: { dealerId_code: { dealerId: karachiDealer.id, code: showroom.code } },
         update: { name: showroom.name, address: showroom.address, status: 'active' },
         create: {
@@ -389,7 +381,7 @@ async function main() {
         include: { warehouse: true },
       });
       if (!location.warehouse) {
-        await prisma.warehouse.create({
+        await db.warehouse.create({
           data: {
             organizationId: pakistanOrg.id,
             showroomId: location.id,
@@ -412,7 +404,7 @@ async function main() {
 
   const createdRegions = [];
   for (const region of regions) {
-    const result = await prisma.region.upsert({
+    const result = await db.region.upsert({
       where: { organizationId_code: { organizationId: org.id, code: region.code } },
       update: {},
       create: {
@@ -432,7 +424,7 @@ async function main() {
 
   for (const dealer of initialDealers) {
     const region = createdRegions.find((entry) => entry.code === dealer.regionCode);
-    await prisma.dealer.upsert({
+    await db.dealer.upsert({
       where: { registrationNumber: dealer.registrationNumber },
       update: {},
       create: {
@@ -459,7 +451,7 @@ async function main() {
   ];
 
   for (const product of products) {
-    await prisma.product.upsert({
+    await db.product.upsert({
       where: { sku: product.sku },
       update: {},
       create: {
@@ -481,7 +473,7 @@ async function main() {
     { sku: 'PAK-EV-CTX-003', name: 'EcoMax Pro', purchasePrice: 485000, dealerPrice: 535000, retailPrice: 579000 },
   ];
   for (const product of pakistanProducts) {
-    await prisma.product.upsert({
+    await db.product.upsert({
       where: { sku: product.sku },
       update: {},
       create: {
@@ -497,15 +489,15 @@ async function main() {
     });
   }
   if (karachiDealer) {
-    const pakistanShowrooms = await prisma.showroom.findMany({
+    const pakistanShowrooms = await db.showroom.findMany({
       where: { organizationId: pakistanOrg.id, dealerId: karachiDealer.id },
       include: { warehouse: true },
     });
-    const localProducts = await prisma.product.findMany({ where: { organizationId: pakistanOrg.id, isActive: true } });
+    const localProducts = await db.product.findMany({ where: { organizationId: pakistanOrg.id, isActive: true } });
     for (const showroom of pakistanShowrooms) {
       if (!showroom.warehouse) continue;
       for (const [index, product] of localProducts.entries()) {
-        await prisma.inventory.upsert({
+        await db.inventory.upsert({
           where: { productId_warehouseId: { productId: product.id, warehouseId: showroom.warehouse.id } },
           update: {},
           create: {
@@ -523,7 +515,7 @@ async function main() {
 
   const departments = ['Operations', 'Sales', 'Finance', 'Warehouse'];
   for (const departmentName of departments) {
-    await prisma.department.upsert({
+    await db.department.upsert({
       where: { id: departmentName },
       update: {},
       create: {
@@ -542,9 +534,9 @@ async function main() {
   ];
 
   for (const employee of employees) {
-    const department = await prisma.department.findFirst({ where: { name: employee.departmentName } });
+    const department = await db.department.findFirst({ where: { name: employee.departmentName } });
     const region = createdRegions.find((entry) => entry.code === employee.regionCode);
-    await prisma.employee.upsert({
+    await db.employee.upsert({
       where: { employeeCode: employee.employeeCode },
       update: {},
       create: {
@@ -569,7 +561,7 @@ async function main() {
   ];
 
   for (const vendor of vendors) {
-    await prisma.vendor.upsert({
+    await db.vendor.upsert({
       where: { id: vendor.name },
       update: {},
       create: {
@@ -584,9 +576,9 @@ async function main() {
     });
   }
 
-  const employeeList = await prisma.employee.findMany({ where: { organizationId: org.id } });
+  const employeeList = await db.employee.findMany({ where: { organizationId: org.id } });
   for (const [index, employee] of employeeList.entries()) {
-    await prisma.attendance.upsert({
+    await db.attendance.upsert({
       where: { id: `attendance-${employee.id}` },
       update: {},
       create: {
@@ -597,7 +589,7 @@ async function main() {
       },
     });
 
-    await prisma.salary.upsert({
+    await db.salary.upsert({
       where: { id: `salary-${employee.id}` },
       update: {},
       create: {
@@ -610,7 +602,7 @@ async function main() {
     });
   }
 
-  const warehouse = await prisma.warehouse.upsert({
+  const warehouse = await db.warehouse.upsert({
     where: { code: 'WH-CENTRAL' },
     update: {},
     create: {
@@ -622,7 +614,7 @@ async function main() {
     },
   });
 
-  const northHub = await prisma.warehouse.upsert({
+  const northHub = await db.warehouse.upsert({
     where: { code: 'WH-NORTH' },
     update: {},
     create: {
@@ -634,9 +626,9 @@ async function main() {
     },
   });
 
-  const productList = await prisma.product.findMany({ where: { organizationId: org.id } });
+  const productList = await db.product.findMany({ where: { organizationId: org.id } });
   for (const [index, item] of productList.entries()) {
-    await prisma.inventory.upsert({
+    await db.inventory.upsert({
       where: { productId_warehouseId: { productId: item.id, warehouseId: warehouse.id } },
       update: {},
       create: {
@@ -649,7 +641,7 @@ async function main() {
       },
     });
 
-    await prisma.inventory.upsert({
+    await db.inventory.upsert({
       where: { productId_warehouseId: { productId: item.id, warehouseId: northHub.id } },
       update: {},
       create: {
@@ -665,7 +657,7 @@ async function main() {
 
   const sampleProduct = productList[0];
   if (sampleProduct) {
-    await prisma.stockTransfer.upsert({
+    await db.stockTransfer.upsert({
       where: { referenceNo: 'TR-INIT-001' },
       update: {},
       create: {
@@ -682,24 +674,30 @@ async function main() {
       },
     });
   }
-
-  console.log(JSON.stringify({
-    message: 'Seed complete',
-    organizations: ['ev-dealer-group', 'pakistan-ev-dealer-group'],
-    demoAccounts: [
-      process.env.DEMO_ADMIN_EMAIL || 'admin@evdealer.com',
-      'hamza.khan@pakistan-ev.com',
-      'sana.malik@pakistan-ev.com',
-      'bilal.ahmed@pakistan-ev.com',
-      'usman.tariq@pakistan-ev.com',
-    ],
-  }, null, 2));
 }
 
-main()
+runSeedOnce(prisma, seedDemoData)
+  .then((seeded) => {
+    if (!seeded) {
+      console.log('Demo data has already been seeded; skipping.');
+      return;
+    }
+
+    console.log(JSON.stringify({
+      message: 'Seed complete',
+      organizations: ['ev-dealer-group', 'pakistan-ev-dealer-group'],
+      demoAccounts: [
+        process.env.DEMO_ADMIN_EMAIL || 'admin@evdealer.com',
+        'hamza.khan@pakistan-ev.com',
+        'sana.malik@pakistan-ev.com',
+        'bilal.ahmed@pakistan-ev.com',
+        'usman.tariq@pakistan-ev.com',
+      ],
+    }, null, 2));
+  })
   .catch((error) => {
     console.error(error);
-    process.exit(1);
+    process.exitCode = 1;
   })
   .finally(async () => {
     await prisma.$disconnect();

@@ -247,17 +247,19 @@ npx prisma generate
 npx prisma db seed
 ```
 
-`migrate deploy` applies the checked-in PostgreSQL migration history; the seed adds demo data. The seed can be rerun to reapply baseline data, but it resets demo account passwords to the configured seed values.
+`migrate deploy` applies the checked-in PostgreSQL migration history; the seed adds demo data. The seed records a database marker after it succeeds, so subsequent runs skip and do not reset demo account passwords. Use a fresh database if you need to repeat the initial seed.
 
 ### Vercel deployment
 
-The checked-in `vercel.json` runs `npm run vercel-build`. That command applies pending PostgreSQL migrations with `prisma migrate deploy`, generates Prisma Client, and then builds the Next.js app. Configure these Vercel environment variables for every environment you deploy:
+The checked-in `vercel.json` runs `npm run vercel-build`. That command applies pending PostgreSQL migrations with `prisma migrate deploy`, generates Prisma Client, runs the guarded one-time demo seed, and then builds the Next.js app. Configure these Vercel environment variables for every environment you deploy:
 
 | Variable | Value |
 |---|---|
 | `DATABASE_URL` | The PostgreSQL connection string shown by the provider's Quick connect flow |
 
-Use the PostgreSQL integration value, not a MySQL URL. Set separate Preview and Production database URLs (or disable Preview deployments) so a Preview build cannot apply migrations to the Production database. The PostgreSQL database itself must already exist; Prisma migrations create its tables and constraints. The Vercel build does **not** run the seed script, to avoid creating or resetting demo accounts in production.
+Use the PostgreSQL integration value, not a MySQL URL. Set separate Preview and Production database URLs (or disable Preview deployments) so a Preview build cannot apply migrations or seed data in the Production database. The PostgreSQL database itself must already exist; Prisma migrations create its tables and constraints. On its first successful build against a database, Vercel runs the demo seed once after migrations. A PostgreSQL advisory lock and a database marker make this safe when builds overlap; later builds skip seeding. If seeding fails, the transaction rolls back and a later build can retry.
+
+Automatic seeding creates demo accounts with the default passwords listed below (unless `DEMO_ADMIN_PASSWORD` is set for the primary admin). Configure a strong `DEMO_ADMIN_PASSWORD` in Vercel and use this only with a demo database. The other demo accounts retain their documented default passwords.
 
 ### 4. Start the application
 
@@ -313,7 +315,7 @@ For deployed environments, apply checked-in migrations with `npx prisma migrate 
 |---|---|
 | `npm run dev` | Start Next.js development server |
 | `npm run build` | Create the optimized production build |
-| `npm run vercel-build` | Apply PostgreSQL migrations, generate Prisma Client, and build for Vercel |
+| `npm run vercel-build` | Apply PostgreSQL migrations, generate Prisma Client, seed demo data once, and build for Vercel |
 | `npm start` | Start the production server after building |
 | `npm run lint` | Run ESLint across the repository |
 | `npm test` | Run Node.js tests under `tests/` |
